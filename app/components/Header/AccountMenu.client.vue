@@ -62,6 +62,9 @@ watch(menuRef, () => {
   if (!menuRef.value) return
   // Set up focus for the first menu item
   const firstMenuItem = menuRef.value.querySelector('[role="menuitem"]') as HTMLButtonElement
+  if (!firstMenuItem) {
+    throw new Error('Cannot find a menuitem to focus')
+  }
   firstMenuItem.tabIndex = 0
   firstMenuItem.focus()
 })
@@ -92,7 +95,10 @@ function onMenuKeyDown(event: KeyboardEvent) {
   const menuItems: HTMLElement[] = Array.from(menu.querySelectorAll('[role="menuitem"]'))
   // Find the current item
   let currentIndex = menuItems.findIndex(menuItem => menuItem.tabIndex !== -1)
-  let currentMenuItem = menuItems.at(currentIndex)!
+  const currentMenuItem = menuItems.at(currentIndex)
+  if (!currentMenuItem) {
+    throw new Error(`Missing menuitem at index ${currentIndex}`)
+  }
 
   switch (event.key) {
     case menuItemNavKeys.prev:
@@ -112,13 +118,16 @@ function onMenuKeyDown(event: KeyboardEvent) {
       return
   }
 
+  const menuItemToFocus = menuItems.at(currentIndex)
+  if (!menuItemToFocus) {
+    throw new RangeError(`currentIndex (${currentIndex}) outside of range of menu items`)
+  }
+
   event.preventDefault()
 
   currentMenuItem.tabIndex = -1
-  // Update and focus the new current item
-  currentMenuItem = menuItems.at(currentIndex)!
-  currentMenuItem.tabIndex = 0
-  currentMenuItem.focus()
+  menuItemToFocus.tabIndex = 0
+  menuItemToFocus.focus()
 }
 
 function mod(n: number, m: number): number {
