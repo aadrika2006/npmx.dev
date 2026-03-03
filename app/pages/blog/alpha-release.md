@@ -186,6 +186,12 @@ headline="Read more from the community"
     description: 'How getting involved in npmx made me a better developer.'
   },
   {
+    url: 'https://news.atmosphereconf.org/3mg5b3zvktc2i',
+    title: 'npmx goes social with atproto',
+    authorHandle: 'atprotocol.dev',
+    description: 'Announcing npmx speakers, and congratulations on launch day!'
+  },
+  {
     url: 'https://www.radosvet.dev/posts/career/from-newsletter-to-open-source',
     title: 'From a Newsletter Link to My First Open Source Contribution',
     authorHandle: 'radosvet.dev',
