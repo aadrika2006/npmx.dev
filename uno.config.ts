@@ -9,7 +9,6 @@ import {
 import type { Theme } from '@unocss/preset-wind4/theme'
 import { presetRtl } from './uno-preset-rtl'
 import { presetA11y } from './uno-preset-a11y'
-import { transformerIconInlineBlock } from './uno-transformer-icon-inline-block'
 
 const customIcons = {
   'agent-skills':
@@ -39,12 +38,8 @@ export default defineConfig({
     // keep this preset last
     ...(process.env.CI ? [] : [presetRtl(), presetA11y()]),
   ].filter(Boolean),
-  content: {
-    pipeline: {
-      exclude: [/\.(css|postcss|sass|scss|less|stylus|styl)($|\?)/, /[/\\]node_modules[/\\]/],
-    },
-  },
-  transformers: [transformerDirectives(), transformerVariantGroup(), transformerIconInlineBlock()],
+  outputToCssLayers: true,
+  transformers: [transformerDirectives(), transformerVariantGroup()],
   theme: {
     spacing: { DEFAULT: '4px' },
     font: {
