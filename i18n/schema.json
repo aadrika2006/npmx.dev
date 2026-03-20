@@ -909,6 +909,9 @@
             },
             "compare": {
               "type": "string"
+            },
+            "timeline": {
+              "type": "string"
             }
           },
           "additionalProperties": false
@@ -1259,6 +1262,15 @@
               "type": "string"
             },
             "no_match_filter": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "timeline": {
+          "type": "object",
+          "properties": {
+            "load_more": {
               "type": "string"
             }
           },
