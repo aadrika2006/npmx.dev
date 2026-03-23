@@ -8,6 +8,8 @@ definePageMeta({
   path: '/package-timeline/:org?/:packageName/v/:version',
 })
 
+const { t } = useI18n()
+
 const route = useRoute('timeline')
 
 const packageName = computed(() =>
@@ -39,6 +41,7 @@ const PAGE_SIZE = 25
 const timelineEntries = ref<TimelineVersion[]>([])
 const totalVersions = ref(0)
 const loadingMore = ref(false)
+const loadError = ref(false)
 
 const hasMore = computed(() => timelineEntries.value.length < totalVersions.value)
 
@@ -51,7 +54,7 @@ async function fetchTimeline(offset: number): Promise<TimelineResponse> {
 
 // Initial load — useAsyncData serializes the full response across SSR → client
 const { data: initialTimeline } = await useAsyncData(
-  () => `timeline:${packageName.value}`,
+  `timeline:${packageName.value}`,
   () => fetchTimeline(0),
 )
 
@@ -63,12 +66,16 @@ watch(initialTimeline, (data) => {
 }, { immediate: true })
 
 async function loadMore() {
-  if (loadingMore.value) return
+  if (loadingMore.value || sizesLoading.value) return
   loadingMore.value = true
+  loadError.value = false
   try {
     const data = await fetchTimeline(timelineEntries.value.length)
     timelineEntries.value = [...timelineEntries.value, ...data.versions]
     totalVersions.value = data.total
+  }
+  catch {
+    loadError.value = true
   }
   finally {
     loadingMore.value = false
@@ -80,6 +87,8 @@ const DEP_INCREASE_THRESHOLD = 5
 
 const sizeCache = shallowReactive(new Map<string, InstallSizeResult>())
 const fetchingVersions = shallowReactive(new Set<string>())
+
+const sizesLoading = computed(() => fetchingVersions.size > 0)
 
 async function fetchSize(ver: string) {
   if (sizeCache.has(ver) || fetchingVersions.has(ver)) return
@@ -109,26 +118,20 @@ if (import.meta.client) {
   )
 }
 
-interface VersionEvents {
-  installSize?: {
-    direction: 'increase' | 'decrease'
-    sizeRatio: number
-    sizeDelta: number
-  }
-  deps?: {
-    direction: 'increase' | 'decrease'
-    depDiff: number
-  }
-  license?: { from: string; to: string }
-  esm?: 'added' | 'removed'
-  types?: 'added' | 'removed'
+const bytesFormatter = useBytesFormatter()
+
+interface SubEvent {
+  key: string
+  positive: boolean
+  icon: string
+  text: string
 }
 
 // Detect notable changes between consecutive versions (size, license, ESM, types)
 // Versions are compared against their semver predecessor, not chronological neighbor,
 // so interleaved legacy releases don't produce misleading cross-line diffs.
-const versionEvents = computed(() => {
-  const events = new Map<string, VersionEvents>()
+const versionSubEvents = computed(() => {
+  const result = new Map<string, SubEvent[]>()
   const entries = timelineEntries.value
 
   // Sort by semver to find each version's true predecessor
@@ -142,7 +145,7 @@ const versionEvents = computed(() => {
     const previous = prevBySemver.get(current.version)
     if (!previous) continue
 
-    const ev: VersionEvents = {}
+    const events: SubEvent[] = []
 
     // Size changes
     const currentSize = sizeCache.get(current.version)
@@ -160,18 +163,32 @@ const versionEvents = computed(() => {
       const depsDecreased = depDiff < -DEP_INCREASE_THRESHOLD
 
       if (sizeIncreased || sizeDecreased) {
-        ev.installSize = {
-          direction: sizeDecreased ? 'decrease' : 'increase',
-          sizeRatio,
-          sizeDelta: currentSize.totalSize - previousSize.totalSize,
-        }
+        const sizeDelta = currentSize.totalSize - previousSize.totalSize
+        events.push({
+          key: 'size',
+          positive: sizeDecreased,
+          icon: sizeDecreased ? 'i-lucide:trending-down' : 'i-lucide:trending-up',
+          text: sizeDecreased
+            ? t('package.timeline.size_decrease', {
+                percent: Math.abs(Math.round(sizeRatio * 100)),
+                size: bytesFormatter.format(Math.abs(sizeDelta)),
+              })
+            : t('package.timeline.size_increase', {
+                percent: Math.round(sizeRatio * 100),
+                size: bytesFormatter.format(sizeDelta),
+              }),
+        })
       }
 
       if (depsIncreased || depsDecreased) {
-        ev.deps = {
-          direction: depsDecreased ? 'decrease' : 'increase',
-          depDiff,
-        }
+        events.push({
+          key: 'deps',
+          positive: depsDecreased,
+          icon: depsDecreased ? 'i-lucide:trending-down' : 'i-lucide:trending-up',
+          text: depDiff > 0
+            ? t('package.timeline.dep_increase', { count: depDiff })
+            : t('package.timeline.dep_decrease', { count: Math.abs(depDiff) }),
+        })
       }
     }
 
@@ -179,28 +196,57 @@ const versionEvents = computed(() => {
     const currentLicense = current.license ?? 'Unknown'
     const previousLicense = previous.license ?? 'Unknown'
     if (currentLicense !== previousLicense) {
-      ev.license = { from: previousLicense, to: currentLicense }
+      events.push({
+        key: 'license',
+        positive: false,
+        icon: 'i-lucide:scale',
+        text: t('package.timeline.license_change', { from: previousLicense, to: currentLicense }),
+      })
     }
 
     // ESM support changes
     const currentIsEsm = current.type === 'module'
     const previousIsEsm = previous.type === 'module'
-    if (currentIsEsm && !previousIsEsm) ev.esm = 'added'
-    else if (!currentIsEsm && previousIsEsm) ev.esm = 'removed'
+    if (currentIsEsm && !previousIsEsm) {
+      events.push({
+        key: 'esm',
+        positive: true,
+        icon: 'i-lucide:package',
+        text: t('package.timeline.esm_added'),
+      })
+    } else if (!currentIsEsm && previousIsEsm) {
+      events.push({
+        key: 'esm',
+        positive: false,
+        icon: 'i-lucide:package',
+        text: t('package.timeline.esm_removed'),
+      })
+    }
 
     // TypeScript types changes
-    if (current.hasTypes && !previous.hasTypes) ev.types = 'added'
-    else if (!current.hasTypes && previous.hasTypes) ev.types = 'removed'
+    if (current.hasTypes && !previous.hasTypes) {
+      events.push({
+        key: 'types',
+        positive: true,
+        icon: 'i-lucide:braces',
+        text: t('package.timeline.types_added'),
+      })
+    } else if (!current.hasTypes && previous.hasTypes) {
+      events.push({
+        key: 'types',
+        positive: false,
+        icon: 'i-lucide:braces',
+        text: t('package.timeline.types_removed'),
+      })
+    }
 
-    if (ev.installSize || ev.deps || ev.license || ev.esm || ev.types) {
-      events.set(current.version, ev)
+    if (events.length) {
+      result.set(current.version, events)
     }
   }
 
-  return events
+  return result
 })
-
-const bytesFormatter = useBytesFormatter()
 
 useSeoMeta({
   title: () => `Timeline - ${packageName.value} - npmx`,
@@ -254,161 +300,29 @@ useSeoMeta({
               day="numeric"
             />
           </div>
-          <!-- Sub-events branch -->
+          <!-- Sub-events -->
           <ol
-            v-if="versionEvents.has(entry.version)"
+            v-if="versionSubEvents.has(entry.version)"
             class="relative border-s border-border/50 ms-3 mt-2"
           >
-            <template v-for="(ev, _) in [versionEvents.get(entry.version)!]" :key="0">
-              <!-- Install size event -->
-              <li v-if="ev.installSize" class="mb-2 ms-4 relative last:mb-0">
-                <span
-                  class="absolute -start-[calc(1rem+0.375rem)] top-0.5 flex items-center justify-center w-3 h-3 rounded-full border"
-                  :class="
-                    ev.installSize.direction === 'decrease'
-                      ? 'bg-green-500 border-green-600'
-                      : 'bg-amber-500 border-amber-600'
-                  "
-                >
-                  <span
-                    class="w-2 h-2 text-white"
-                    :class="
-                      ev.installSize.direction === 'decrease'
-                        ? 'i-lucide:trending-down'
-                        : 'i-lucide:trending-up'
-                    "
-                    aria-hidden="true"
-                  />
-                </span>
-                <p
-                  class="text-xs"
-                  :class="
-                    ev.installSize.direction === 'decrease'
-                      ? 'text-green-700 dark:text-green-400'
-                      : 'text-amber-700 dark:text-amber-400'
-                  "
-                >
-                  {{
-                    ev.installSize.direction === 'decrease'
-                      ? $t('package.timeline.size_decrease', {
-                          percent: Math.abs(Math.round(ev.installSize.sizeRatio * 100)),
-                          size: bytesFormatter.format(Math.abs(ev.installSize.sizeDelta)),
-                        })
-                      : $t('package.timeline.size_increase', {
-                          percent: Math.round(ev.installSize.sizeRatio * 100),
-                          size: bytesFormatter.format(ev.installSize.sizeDelta),
-                        })
-                  }}
-                </p>
-              </li>
-              <!-- Dependency count event -->
-              <li v-if="ev.deps" class="mb-2 ms-4 relative last:mb-0">
-                <span
-                  class="absolute -start-[calc(1rem+0.375rem)] top-0.5 flex items-center justify-center w-3 h-3 rounded-full border"
-                  :class="
-                    ev.deps.direction === 'decrease'
-                      ? 'bg-green-500 border-green-600'
-                      : 'bg-amber-500 border-amber-600'
-                  "
-                >
-                  <span
-                    class="w-2 h-2 text-white"
-                    :class="
-                      ev.deps.direction === 'decrease'
-                        ? 'i-lucide:trending-down'
-                        : 'i-lucide:trending-up'
-                    "
-                    aria-hidden="true"
-                  />
-                </span>
-                <p
-                  class="text-xs"
-                  :class="
-                    ev.deps.direction === 'decrease'
-                      ? 'text-green-700 dark:text-green-400'
-                      : 'text-amber-700 dark:text-amber-400'
-                  "
-                >
-                  {{
-                    ev.deps.depDiff > 0
-                      ? $t('package.timeline.dep_increase', { count: ev.deps.depDiff })
-                      : $t('package.timeline.dep_decrease', {
-                          count: Math.abs(ev.deps.depDiff),
-                        })
-                  }}
-                </p>
-              </li>
-              <!-- License change -->
-              <li v-if="ev.license" class="mb-2 ms-4 relative last:mb-0">
-                <span
-                  class="absolute -start-[calc(1rem+0.375rem)] top-0.5 flex items-center justify-center w-3 h-3 rounded-full border bg-amber-500 border-amber-600"
-                >
-                  <span class="w-2 h-2 text-white i-lucide:scale" aria-hidden="true" />
-                </span>
-                <p class="text-xs text-amber-700 dark:text-amber-400">
-                  {{
-                    $t('package.timeline.license_change', {
-                      from: ev.license.from,
-                      to: ev.license.to,
-                    })
-                  }}
-                </p>
-              </li>
-              <!-- ESM change -->
-              <li v-if="ev.esm" class="mb-2 ms-4 relative last:mb-0">
-                <span
-                  class="absolute -start-[calc(1rem+0.375rem)] top-0.5 flex items-center justify-center w-3 h-3 rounded-full border"
-                  :class="
-                    ev.esm === 'added'
-                      ? 'bg-green-500 border-green-600'
-                      : 'bg-amber-500 border-amber-600'
-                  "
-                >
-                  <span class="w-2 h-2 text-white i-lucide:package" aria-hidden="true" />
-                </span>
-                <p
-                  class="text-xs"
-                  :class="
-                    ev.esm === 'added'
-                      ? 'text-green-700 dark:text-green-400'
-                      : 'text-amber-700 dark:text-amber-400'
-                  "
-                >
-                  {{
-                    ev.esm === 'added'
-                      ? $t('package.timeline.esm_added')
-                      : $t('package.timeline.esm_removed')
-                  }}
-                </p>
-              </li>
-              <!-- Types change -->
-              <li v-if="ev.types" class="mb-2 ms-4 relative last:mb-0">
-                <span
-                  class="absolute -start-[calc(1rem+0.375rem)] top-0.5 flex items-center justify-center w-3 h-3 rounded-full border"
-                  :class="
-                    ev.types === 'added'
-                      ? 'bg-green-500 border-green-600'
-                      : 'bg-amber-500 border-amber-600'
-                  "
-                >
-                  <span class="w-2 h-2 text-white i-lucide:braces" aria-hidden="true" />
-                </span>
-                <p
-                  class="text-xs"
-                  :class="
-                    ev.types === 'added'
-                      ? 'text-green-700 dark:text-green-400'
-                      : 'text-amber-700 dark:text-amber-400'
-                  "
-                >
-                  {{
-                    ev.types === 'added'
-                      ? $t('package.timeline.types_added')
-                      : $t('package.timeline.types_removed')
-                  }}
-                </p>
-              </li>
-            </template>
+            <li
+              v-for="ev in versionSubEvents.get(entry.version)"
+              :key="ev.key"
+              class="mb-2 ms-4 relative last:mb-0"
+            >
+              <span
+                class="absolute -start-[calc(1rem+0.375rem)] top-0.5 flex items-center justify-center w-3 h-3 rounded-full border"
+                :class="ev.positive ? 'bg-green-500 border-green-600' : 'bg-amber-500 border-amber-600'"
+              >
+                <span class="w-2 h-2 text-white" :class="ev.icon" aria-hidden="true" />
+              </span>
+              <p
+                class="text-xs"
+                :class="ev.positive ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'"
+              >
+                {{ ev.text }}
+              </p>
+            </li>
           </ol>
         </li>
       </ol>
@@ -417,11 +331,15 @@ useSeoMeta({
       <div v-if="hasMore" class="mt-4 ms-10">
         <button
           type="button"
-          class="text-sm text-accent hover:text-accent/80 transition-colors"
+          class="text-sm text-accent hover:text-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="loadingMore || sizesLoading"
           @click="loadMore"
         >
           {{ $t('package.timeline.load_more') }}
         </button>
+        <p v-if="loadError" class="text-xs text-red-600 dark:text-red-400 mt-1">
+          Failed to load more versions. Try again.
+        </p>
       </div>
 
       <!-- Empty state -->
