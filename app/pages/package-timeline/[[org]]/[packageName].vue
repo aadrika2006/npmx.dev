@@ -394,7 +394,7 @@ useSeoMeta({
           {{ $t('package.timeline.load_more') }}
         </button>
         <p v-if="loadError" class="text-xs text-red-600 dark:text-red-400 mt-1">
-          Failed to load more versions. Try again.
+          {{ $t('package.timeline.load_error') }}
         </p>
       </div>
 
