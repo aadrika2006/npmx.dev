@@ -448,6 +448,7 @@
     },
     "timeline": {
       "load_more": "Load more",
+      "load_error": "Failed to load timeline. Please try again later.",
       "size_increase": "Install size increased by {percent}% ({size})",
       "size_decrease": "Install size decreased by {percent}% ({size})",
       "dep_increase": "{count} dependencies added",

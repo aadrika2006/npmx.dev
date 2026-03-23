@@ -1345,6 +1345,9 @@
             "load_more": {
               "type": "string"
             },
+            "load_error": {
+              "type": "string"
+            },
             "size_increase": {
               "type": "string"
             },

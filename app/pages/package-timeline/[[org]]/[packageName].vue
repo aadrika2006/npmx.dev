@@ -55,16 +55,23 @@ async function fetchTimeline(offset: number): Promise<TimelineResponse> {
 }
 
 // Initial load — useAsyncData serializes the full response across SSR → client
-const { data: initialTimeline } = await useAsyncData(`timeline:${packageName.value}`, () =>
-  fetchTimeline(0),
+const initialLoadError = ref(false)
+
+const { data: initialTimeline } = await useAsyncData(
+  `timeline:${packageName.value}`,
+  () => fetchTimeline(0),
+  { watch: [packageName] },
 )
 
 watch(
   initialTimeline,
   data => {
+    initialLoadError.value = false
     if (data) {
       timelineEntries.value = data.versions
       totalVersions.value = data.total
+    } else {
+      initialLoadError.value = true
     }
   },
   { immediate: true },
@@ -93,18 +100,23 @@ const fetchingVersions = shallowReactive(new Set<string>())
 
 const sizesLoading = computed(() => fetchingVersions.size > 0)
 
+function sizeKey(ver: string) {
+  return `${packageName.value}@${ver}`
+}
+
 async function fetchSize(ver: string) {
-  if (sizeCache.has(ver) || fetchingVersions.has(ver)) return
-  fetchingVersions.add(ver)
+  const key = sizeKey(ver)
+  if (sizeCache.has(key) || fetchingVersions.has(key)) return
+  fetchingVersions.add(key)
   try {
     const data = await $fetch<InstallSizeResult>(
       `/api/registry/install-size/${packageName.value}/v/${ver}`,
     )
-    sizeCache.set(ver, data)
+    sizeCache.set(key, data)
   } catch {
     // silently skip — size data is best-effort
   } finally {
-    fetchingVersions.delete(ver)
+    fetchingVersions.delete(key)
   }
 }
 
@@ -151,8 +163,8 @@ const versionSubEvents = computed(() => {
     const events: SubEvent[] = []
 
     // Size changes
-    const currentSize = sizeCache.get(current.version)
-    const previousSize = sizeCache.get(previous.version)
+    const currentSize = sizeCache.get(sizeKey(current.version))
+    const previousSize = sizeCache.get(sizeKey(previous.version))
     if (currentSize && previousSize) {
       const sizeRatio =
         previousSize.totalSize > 0
@@ -386,7 +398,14 @@ useSeoMeta({
         </p>
       </div>
 
-      <!-- Empty state -->
+      <!-- Error state -->
+      <div v-else-if="initialLoadError" class="py-20 text-center">
+        <p class="text-sm text-red-600 dark:text-red-400">
+          {{ $t('package.timeline.load_error') }}
+        </p>
+      </div>
+
+      <!-- Loading state -->
       <div v-else-if="!timelineEntries.length" class="py-20 text-center">
         <span class="i-svg-spinners:ring-resize w-5 h-5 text-fg-subtle" />
       </div>
