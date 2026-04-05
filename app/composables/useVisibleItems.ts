@@ -1,7 +1,4 @@
-export function useVisibleItems<T>(
-  items: MaybeRefOrGetter<T[]>,
-  limit: number,
-) {
+export function useVisibleItems<T>(items: MaybeRefOrGetter<T[]>, limit: number) {
   const showAll = shallowRef(false)
 
   const visibleItems = computed(() => {
@@ -9,17 +6,19 @@ export function useVisibleItems<T>(
     return showAll.value ? list : list.slice(0, limit)
   })
 
-  const hiddenCount = computed(() =>
-    Math.max(0, toValue(items).length - limit),
-  )
+  const hiddenCount = computed(() => Math.max(0, toValue(items).length - limit))
 
-  const hasMore = computed(
-    () => !showAll.value && toValue(items).length > limit,
-  )
+  const hasMore = computed(() => !showAll.value && toValue(items).length > limit)
 
-  const expand = () => { showAll.value = true }
-  const collapse = () => { showAll.value = false }
-  const toggle = () => { showAll.value = !showAll.value }
+  const expand = () => {
+    showAll.value = true
+  }
+  const collapse = () => {
+    showAll.value = false
+  }
+  const toggle = () => {
+    showAll.value = !showAll.value
+  }
 
   return { visibleItems, hiddenCount, hasMore, showAll, expand, collapse, toggle }
 }
