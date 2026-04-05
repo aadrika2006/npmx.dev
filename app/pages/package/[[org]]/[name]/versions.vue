@@ -432,8 +432,8 @@ const flatItems = computed<FlatItem[]>(() => {
                         item.versions[0]
                       }}</span>
                       <DateTime
-                        v-if="getVersionTime(item.versions[0])"
-                        :datetime="getVersionTime(item.versions[0])!"
+                        v-if="getVersionTime(item.versions[0]!)"
+                        :datetime="getVersionTime(item.versions[0]!)!"
                         class="text-xs text-fg-subtle hidden sm:block"
                         year="numeric"
                         month="short"
