@@ -12,7 +12,9 @@ export function useVisibleItems<T>(
     return showAll.value ? list : list.slice(0, limit)
   })
 
-  const hiddenCount = computed(() => Math.max(0, toValue(items).length - limit))
+  const hiddenCount = computed(() =>
+    showAll.value ? 0 : Math.max(0, toValue(items).length - limit),
+  )
 
   const hasMore = computed(() => !showAll.value && toValue(items).length > limit)
 

@@ -42,7 +42,7 @@ describe('useVisibleItems', () => {
   describe('expand()', () => {
     it('shows all items after expand', () => {
       const items = [1, 2, 3, 4, 5, 6]
-      const { visibleItems, hasMore, expand } = useVisibleItems(items, 3)
+      const { visibleItems, hasMore, hiddenCount, expand } = useVisibleItems(items, 3)
 
       expect(visibleItems.value).toEqual([1, 2, 3])
 
@@ -50,6 +50,7 @@ describe('useVisibleItems', () => {
 
       expect(visibleItems.value).toEqual([1, 2, 3, 4, 5, 6])
       expect(hasMore.value).toBe(false)
+      expect(hiddenCount.value).toBe(0)
     })
   })
 
