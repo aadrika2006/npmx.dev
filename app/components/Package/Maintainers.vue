@@ -18,23 +18,20 @@ const {
 const showAddOwner = shallowRef(false)
 const newOwnerUsername = shallowRef('')
 const isAdding = shallowRef(false)
-const showAllMaintainers = shallowRef(false)
-
-const DEFAULT_VISIBLE_MAINTAINERS = 5
 
 // Show admin controls when connected (let npm CLI handle permission errors)
 const canManageOwners = computed(() => isConnected.value)
 
-// Computed for visible maintainers with show more/fewer support
-const visibleMaintainers = computed(() => {
-  if (canManageOwners.value || showAllMaintainers.value) {
-    return maintainerAccess.value
-  }
-  return maintainerAccess.value.slice(0, DEFAULT_VISIBLE_MAINTAINERS)
-})
+const {
+  visibleItems,
+  hiddenCount: hiddenMaintainersCount,
+  toggle: toggleMaintainers,
+  showAll: showAllMaintainers,
+} = useVisibleItems(maintainerAccess, 5)
 
-const hiddenMaintainersCount = computed(() =>
-  Math.max(0, maintainerAccess.value.length - DEFAULT_VISIBLE_MAINTAINERS),
+// When managing owners, bypass the limit and show all
+const visibleMaintainers = computed(() =>
+  canManageOwners.value ? maintainerAccess.value : visibleItems.value,
 )
 
 // Extract org name from scoped package
@@ -240,7 +237,7 @@ watch(
     <ButtonBase
       class="mt-2"
       v-if="!canManageOwners && hiddenMaintainersCount > 0"
-      @click="showAllMaintainers = !showAllMaintainers"
+      @click="toggleMaintainers"
     >
       {{
         showAllMaintainers
