@@ -57,7 +57,7 @@ async function fetchTimeline(offset: number): Promise<TimelineResponse> {
   })
 }
 
-// Initial load — useAsyncData serializes the full response across SSR → client
+// Initial load - useAsyncData serializes the full response across SSR to client
 const initialLoadError = ref(false)
 
 const { data: initialTimeline } = await useAsyncData(
@@ -97,6 +97,7 @@ async function loadMore() {
 
 const SIZE_INCREASE_THRESHOLD = 0.25
 const DEP_INCREASE_THRESHOLD = 5
+const NO_LICENSE_VALUES = ['', 'UNLICENSED']
 
 const sizeCache = shallowReactive(new Map<string, InstallSizeResult>())
 const fetchingVersions = shallowReactive(new Set<string>())
@@ -117,7 +118,7 @@ async function fetchSize(ver: string) {
     )
     sizeCache.set(key, data)
   } catch {
-    // silently skip — size data is best-effort
+    // silently skip - size data is best-effort
   } finally {
     fetchingVersions.delete(key)
   }
@@ -215,9 +216,11 @@ const versionSubEvents = computed(() => {
     const currentLicense = current.license ?? 'Unknown'
     const previousLicense = previous.license ?? 'Unknown'
     if (currentLicense !== previousLicense) {
+      const hadNoLicense = NO_LICENSE_VALUES.includes(previousLicense)
+      const hasNoLicense = NO_LICENSE_VALUES.includes(currentLicense)
       events.push({
         key: 'license',
-        positive: false,
+        positive: hadNoLicense && !hasNoLicense,
         icon: 'i-lucide:scale',
         text: t('package.timeline.license_change', { from: previousLicense, to: currentLicense }),
       })
