@@ -40,8 +40,8 @@ export interface PackageQuadrantPoint {
 
 const WEIGHTS = {
   adoption: {
-    downloads: 0.75, // dominant signal because they best reflect real-world adoption (in the data we have through facets currently)
-    freshness: 0.15, // small correction so stale packages are slightly
+    downloads: 0.65, // dominant signal because they best reflect real-world adoption (in the data we have through facets currently)
+    freshness: 0.25, // penalising correction for stale packages
     likes: 0.1, // might be pumped up in the future when ./npmx likes are more mainstream
   },
   efficiency: {
