@@ -1,6 +1,7 @@
 # npmx.dev
 
 > A fast, modern browser for the npm registry.
+> Built to streamline how developers explore, manage, and understand npm packages.
 
 <p align="center">
   <a href="https://npmx.dev/">
